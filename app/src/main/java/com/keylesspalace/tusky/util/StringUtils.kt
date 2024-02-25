@@ -3,15 +3,15 @@
 package com.keylesspalace.tusky.util
 
 import android.text.Spanned
-import java.util.Random
+import android.text.SpannedString
+import kotlin.random.Random
 
 private const val POSSIBLE_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
 
 fun randomAlphanumericString(count: Int): String {
     val chars = CharArray(count)
-    val random = Random()
     for (i in 0 until count) {
-        chars[i] = POSSIBLE_CHARS[random.nextInt(POSSIBLE_CHARS.length)]
+        chars[i] = POSSIBLE_CHARS[Random.nextInt(POSSIBLE_CHARS.length)]
     }
     return String(chars)
 }
@@ -46,12 +46,14 @@ fun String.isLessThanOrEqual(other: String): Boolean {
     return this == other || isLessThan(other)
 }
 
+private val EMPTY_SPANNED = SpannedString("")
+
 fun Spanned.trimTrailingWhitespace(): Spanned {
-    var i = length
-    do {
-        i--
-    } while (i >= 0 && get(i).isWhitespace())
-    return subSequence(0, i + 1) as Spanned
+    return when(val i = indexOfLast { !it.isWhitespace() }) {
+        -1 -> EMPTY_SPANNED
+        lastIndex -> this
+        else -> subSequence(0, i + 1) as Spanned
+    }
 }
 
 /**
