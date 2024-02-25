@@ -28,8 +28,7 @@ fun isEmpty(list: List<*>?): Boolean {
  * @return a new ArrayList containing the elements without duplicates in the same order
  */
 fun <T> removeDuplicates(list: List<T>): ArrayList<T> {
-    val set = LinkedHashSet(list)
-    return ArrayList(set)
+    return list.filterNotTo(ArrayList(), HashSet<T>()::add)
 }
 
 inline fun <T> List<T>.withoutFirstWhich(predicate: (T) -> Boolean): List<T> {
