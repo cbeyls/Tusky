@@ -17,14 +17,11 @@
 
 package com.keylesspalace.tusky.util
 
-import java.util.ArrayList
-import java.util.LinkedHashSet
-
 /**
  * @return true if list is null or else return list.isEmpty()
  */
 fun isEmpty(list: List<*>?): Boolean {
-    return list == null || list.isEmpty()
+    return list.isNullOrEmpty()
 }
 
 /**
@@ -36,19 +33,21 @@ fun <T> removeDuplicates(list: List<T>): ArrayList<T> {
 }
 
 inline fun <T> List<T>.withoutFirstWhich(predicate: (T) -> Boolean): List<T> {
-    val newList = toMutableList()
-    val index = newList.indexOfFirst(predicate)
-    if (index != -1) {
-        newList.removeAt(index)
+    val index = indexOfFirst(predicate)
+    if (index == -1) {
+        return this
     }
+    val newList = toMutableList()
+    newList.removeAt(index)
     return newList
 }
 
 inline fun <T> List<T>.replacedFirstWhich(replacement: T, predicate: (T) -> Boolean): List<T> {
-    val newList = toMutableList()
-    val index = newList.indexOfFirst(predicate)
-    if (index != -1) {
-        newList[index] = replacement
+    val index = indexOfFirst(predicate)
+    if (index == -1) {
+        return this
     }
+    val newList = toMutableList()
+    newList[index] = replacement
     return newList
 }
