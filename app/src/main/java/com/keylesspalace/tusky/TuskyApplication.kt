@@ -38,10 +38,8 @@ import dagger.android.HasAndroidInjector
 import de.c1710.filemojicompat_defaults.DefaultEmojiPackList
 import de.c1710.filemojicompat_ui.helpers.EmojiPackHelper
 import de.c1710.filemojicompat_ui.helpers.EmojiPreference
-import java.security.Security
 import java.util.concurrent.TimeUnit
 import javax.inject.Inject
-import org.conscrypt.Conscrypt
 
 class TuskyApplication : Application(), HasAndroidInjector {
     @Inject
@@ -68,8 +66,6 @@ class TuskyApplication : Application(), HasAndroidInjector {
 //                    .build())
 //        }
         super.onCreate()
-
-        Security.insertProviderAt(Conscrypt.newProvider(), 1)
 
         AppInjector.init(this)
 

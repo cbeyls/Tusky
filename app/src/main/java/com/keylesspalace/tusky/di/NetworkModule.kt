@@ -38,13 +38,21 @@ import dagger.Provides
 import java.net.IDN
 import java.net.InetSocketAddress
 import java.net.Proxy
+import java.security.SecureRandom
 import java.util.Date
 import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
+import javax.net.ssl.SSLContext
+import javax.net.ssl.TrustManager
 import okhttp3.Cache
 import okhttp3.OkHttp
 import okhttp3.OkHttpClient
+import okhttp3.internal.platform.Platform
 import okhttp3.logging.HttpLoggingInterceptor
+import org.bouncycastle.jce.provider.BouncyCastleProvider
+import org.bouncycastle.jsse.provider.BouncyCastleJsseProvider
+import org.bouncycastle.tls.crypto.impl.jcajce.JcaTlsCrypto
+import org.bouncycastle.tls.crypto.impl.jcajce.JcaTlsCryptoProvider
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.create
@@ -91,6 +99,25 @@ class NetworkModule {
             .readTimeout(30, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
             .cache(Cache(context.cacheDir, cacheSize))
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            // Add TLS 1.3 support using BouncyCastleJsseProvider.
+            // Don't install it system-wide to be able to still retrieve Android's X509TrustManager
+            val trustManager = Platform.get().platformTrustManager()
+            val jsseProvider = BouncyCastleJsseProvider(false, object : JcaTlsCryptoProvider() {
+                override fun create(random: SecureRandom?): JcaTlsCrypto {
+                    // Use empty SecureRandom constructor instead of SecureRandom.getInstance("DEFAULT")
+                    return super.create(random ?: SecureRandom())
+                }
+            }.apply {
+                // Optional: add support for BC ciphers
+                setProvider(BouncyCastleProvider())
+            })
+            val sslSocketFactory = SSLContext.getInstance("TLS", jsseProvider).apply {
+                init(null, arrayOf<TrustManager>(trustManager), null)
+            }.socketFactory
+            builder.sslSocketFactory(sslSocketFactory, trustManager)
+        }
 
         if (httpProxyEnabled) {
             ProxyConfiguration.create(httpServer, httpPort)?.also { conf ->

@@ -149,8 +149,6 @@ dependencies {
 
     implementation libs.bundles.okhttp
 
-    implementation libs.conscrypt.android
-
     implementation libs.bundles.glide
     ksp libs.glide.compiler
 
@@ -168,7 +166,8 @@ dependencies {
 
     implementation libs.bundles.filemojicompat
 
-    implementation libs.bouncycastle
+    implementation libs.bouncycastle.provider
+    implementation libs.bouncycastle.tls
     implementation libs.unified.push
 
     implementation libs.bundles.xmldiff

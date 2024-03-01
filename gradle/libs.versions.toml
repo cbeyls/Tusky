@@ -21,8 +21,7 @@ androidx-testing = "2.2.0"
 androidx-viewpager2 = "1.0.0"
 androidx-work = "2.9.0"
 androidx-room = "2.6.1"
-bouncycastle = "1.70"
-conscrypt = "2.5.2"
+bouncycastle = "1.77"
 coroutines = "1.8.0"
 dagger = "2.51"
 diffx = "1.1.1"
@@ -97,8 +96,8 @@ androidx-test-junit = { module = "androidx.test.ext:junit", version.ref = "andro
 androidx-viewpager2 = { module = "androidx.viewpager2:viewpager2", version.ref = "androidx-viewpager2" }
 androidx-work-runtime-ktx = { module = "androidx.work:work-runtime-ktx", version.ref = "androidx-work" }
 androidx-work-testing = { module = "androidx.work:work-testing", version.ref = "androidx-work" }
-bouncycastle = { module = "org.bouncycastle:bcprov-jdk15on", version.ref = "bouncycastle" }
-conscrypt-android = { module = "org.conscrypt:conscrypt-android", version.ref = "conscrypt" }
+bouncycastle-provider = { module = "org.bouncycastle:bcprov-jdk15to18", version.ref = "bouncycastle" }
+bouncycastle-tls = { module = "org.bouncycastle:bctls-jdk15to18", version.ref = "bouncycastle" }
 dagger-android-core = { module = "com.google.dagger:dagger-android", version.ref = "dagger" }
 dagger-android-processor = { module = "com.google.dagger:dagger-android-processor", version.ref = "dagger" }
 dagger-android-support = { module = "com.google.dagger:dagger-android-support", version.ref = "dagger" }
