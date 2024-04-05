@@ -5,7 +5,6 @@ import com.keylesspalace.tusky.entity.FilterV1
 import com.keylesspalace.tusky.entity.Status
 import com.keylesspalace.tusky.util.parseAsMastodonHtml
 import java.util.Date
-import java.util.regex.Pattern
 import javax.inject.Inject
 
 /**
@@ -15,21 +14,20 @@ import javax.inject.Inject
  * 2. You call [shouldFilterStatus] to figure out what to display when you load statuses.
  */
 class FilterModel @Inject constructor() {
-    private var pattern: Pattern? = null
+    private var regex: Regex? = null
     private var v1 = false
     lateinit var kind: Filter.Kind
 
     fun initWithFilters(filters: List<FilterV1>) {
         v1 = true
-        this.pattern = makeFilter(filters)
+        this.regex = makeFilter(filters)
     }
 
     fun shouldFilterStatus(status: Status): Filter.Action {
         if (v1) {
-            // Patterns are expensive and thread-safe, matchers are neither.
-            val matcher = pattern?.matcher("") ?: return Filter.Action.NONE
+            val currentRegex = regex ?: return Filter.Action.NONE
 
-            if (status.poll?.options?.any { matcher.reset(it.title).find() } == true) {
+            if (status.poll?.options?.any { currentRegex.find(it.title) != null } == true) {
                 return Filter.Action.HIDE
             }
 
@@ -37,9 +35,9 @@ class FilterModel @Inject constructor() {
             val attachmentsDescriptions = status.attachments.mapNotNull { it.description }
 
             return if (
-                matcher.reset(status.actionableStatus.content.parseAsMastodonHtml().toString()).find() ||
-                (spoilerText.isNotEmpty() && matcher.reset(spoilerText).find()) ||
-                (attachmentsDescriptions.isNotEmpty() && matcher.reset(attachmentsDescriptions.joinToString("\n")).find())
+                currentRegex.find(status.actionableStatus.content.parseAsMastodonHtml()) != null ||
+                (spoilerText.isNotEmpty() && currentRegex.find(spoilerText) != null) ||
+                (attachmentsDescriptions.isNotEmpty() && currentRegex.find(attachmentsDescriptions.joinToString("\n")) != null)
             ) {
                 Filter.Action.HIDE
             } else {
@@ -58,17 +56,17 @@ class FilterModel @Inject constructor() {
         }
     }
 
-    private fun filterToRegexToken(filter: FilterV1): String? {
+    private fun filterToRegexToken(filter: FilterV1): String {
         val phrase = filter.phrase
-        val quotedPhrase = Pattern.quote(phrase)
-        return if (filter.wholeWord && ALPHANUMERIC.matcher(phrase).matches()) {
+        val quotedPhrase = Regex.escape(phrase)
+        return if (filter.wholeWord && ALPHANUMERIC.matches(phrase)) {
             String.format("(^|\\W)%s($|\\W)", quotedPhrase)
         } else {
             quotedPhrase
         }
     }
 
-    private fun makeFilter(filters: List<FilterV1>): Pattern? {
+    private fun makeFilter(filters: List<FilterV1>): Regex? {
         val now = Date()
         val nonExpiredFilters = filters.filter { it.expiresAt?.before(now) != true }
         if (nonExpiredFilters.isEmpty()) return null
@@ -77,10 +75,10 @@ class FilterModel @Inject constructor() {
             .map { filterToRegexToken(it) }
             .joinToString("|")
 
-        return Pattern.compile(tokens, Pattern.CASE_INSENSITIVE)
+        return Regex(tokens, RegexOption.IGNORE_CASE)
     }
 
     companion object {
-        private val ALPHANUMERIC = Pattern.compile("^\\w+$")
+        private val ALPHANUMERIC = Regex("^\\w+$")
     }
 }

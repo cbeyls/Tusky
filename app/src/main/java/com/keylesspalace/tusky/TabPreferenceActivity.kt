@@ -47,7 +47,6 @@ import com.keylesspalace.tusky.util.viewBinding
 import com.keylesspalace.tusky.util.visible
 import dagger.android.DispatchingAndroidInjector
 import dagger.android.HasAndroidInjector
-import java.util.regex.Pattern
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,7 +76,7 @@ class TabPreferenceActivity : BaseActivity(), Injectable, HasAndroidInjector, It
     }
 
     private val hashtagRegex by unsafeLazy {
-        Pattern.compile("([\\w_]*[\\p{Alpha}_][\\w_]*)", Pattern.CASE_INSENSITIVE)
+        Regex("([\\w_]*[\\p{Alpha}_][\\w_]*)", RegexOption.IGNORE_CASE)
     }
 
     private val onFabDismissedCallback = object : OnBackPressedCallback(false) {
@@ -295,7 +294,7 @@ class TabPreferenceActivity : BaseActivity(), Injectable, HasAndroidInjector, It
 
     private fun validateHashtag(input: CharSequence?): Boolean {
         val trimmedInput = input?.trim() ?: ""
-        return trimmedInput.isNotEmpty() && hashtagRegex.matcher(trimmedInput).matches()
+        return trimmedInput.isNotEmpty() && hashtagRegex.matches(trimmedInput)
     }
 
     private fun updateAvailableTabs() {
