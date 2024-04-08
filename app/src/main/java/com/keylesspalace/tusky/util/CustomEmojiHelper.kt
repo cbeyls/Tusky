@@ -21,16 +21,16 @@ import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.drawable.Animatable
 import android.graphics.drawable.Drawable
-import android.text.SpannableStringBuilder
+import android.text.SpannableString
 import android.text.style.ReplacementSpan
 import android.view.View
+import androidx.core.text.set
 import com.bumptech.glide.Glide
 import com.bumptech.glide.request.target.CustomTarget
 import com.bumptech.glide.request.target.Target
 import com.bumptech.glide.request.transition.Transition
 import com.keylesspalace.tusky.entity.Emoji
 import java.lang.ref.WeakReference
-import java.util.regex.Pattern
 
 /**
  * replaces emoji shortcodes in a text with EmojiSpans
@@ -44,16 +44,15 @@ fun CharSequence.emojify(emojis: List<Emoji>, view: View, animate: Boolean): Cha
         return this
     }
 
-    val builder = SpannableStringBuilder.valueOf(this)
+    val spannable = SpannableString.valueOf(this)
 
     emojis.forEach { (shortcode, url, staticUrl) ->
-        val matcher = Pattern.compile(":$shortcode:", Pattern.LITERAL)
-            .matcher(this)
+        val regex = ":$shortcode:".toRegex(RegexOption.LITERAL)
 
-        while (matcher.find()) {
+        for (result in regex.findAll(this)) {
             val span = EmojiSpan(WeakReference(view))
 
-            builder.setSpan(span, matcher.start(), matcher.end(), 0)
+            spannable[result.range] = span
             Glide.with(view)
                 .asDrawable()
                 .load(
@@ -66,7 +65,7 @@ fun CharSequence.emojify(emojis: List<Emoji>, view: View, animate: Boolean): Cha
                 .into(span.getTarget(animate))
         }
     }
-    return builder
+    return spannable
 }
 
 class EmojiSpan(val viewWeakReference: WeakReference<View>) : ReplacementSpan() {
