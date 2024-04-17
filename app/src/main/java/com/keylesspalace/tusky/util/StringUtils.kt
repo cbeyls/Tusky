@@ -2,8 +2,6 @@
 
 package com.keylesspalace.tusky.util
 
-import android.text.Spanned
-import android.text.SpannedString
 import kotlin.random.Random
 
 private const val POSSIBLE_CHARS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ"
@@ -44,16 +42,6 @@ fun String.isLessThan(other: String): Boolean {
  */
 fun String.isLessThanOrEqual(other: String): Boolean {
     return this == other || isLessThan(other)
-}
-
-private val EMPTY_SPANNED = SpannedString("")
-
-fun Spanned.trimTrailingWhitespace(): Spanned {
-    return when(val i = indexOfLast { !it.isWhitespace() }) {
-        -1 -> EMPTY_SPANNED
-        lastIndex -> this
-        else -> subSequence(0, i + 1) as Spanned
-    }
 }
 
 /**

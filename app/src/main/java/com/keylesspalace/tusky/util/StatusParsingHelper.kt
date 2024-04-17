@@ -24,6 +24,7 @@ import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.TypefaceSpan
 import androidx.core.text.parseAsHtml
+import androidx.core.text.toSpanned
 import org.xml.sax.XMLReader
 
 /**
@@ -39,7 +40,8 @@ fun String.parseAsMastodonHtml(tagHandler: TagHandler? = tuskyTagHandler): Spann
         .parseAsHtml(tagHandler = tagHandler)
         /* Html.fromHtml returns trailing whitespace if the html ends in a </p> tag, which
          * most status contents do, so it should be trimmed. */
-        .trimTrailingWhitespace()
+        .trimEnd()
+        .toSpanned()
 }
 
 val tuskyTagHandler = TuskyTagHandler()
