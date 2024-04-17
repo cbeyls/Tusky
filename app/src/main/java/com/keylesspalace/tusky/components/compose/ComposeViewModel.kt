@@ -45,11 +45,15 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asFlow
+import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 
 class ComposeViewModel @Inject constructor(
@@ -79,30 +83,40 @@ class ComposeViewModel @Inject constructor(
     private var currentContent: String? = ""
     private var currentContentWarning: String? = ""
 
-    val instanceInfo: SharedFlow<InstanceInfo> = instanceInfoRepo::getInstanceInfo.asFlow()
+    val instanceInfo: SharedFlow<InstanceInfo> = instanceInfoRepo::getUpdatedInstanceInfoOrFallback.asFlow()
         .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
 
     val emoji: SharedFlow<List<Emoji>> = instanceInfoRepo::getEmojis.asFlow()
         .shareIn(viewModelScope, SharingStarted.Eagerly, replay = 1)
 
-    val markMediaAsSensitive: MutableStateFlow<Boolean> =
+    private val _markMediaAsSensitive =
         MutableStateFlow(accountManager.activeAccount?.defaultMediaSensitivity ?: false)
+    val markMediaAsSensitive: StateFlow<Boolean> = _markMediaAsSensitive.asStateFlow()
 
-    val statusVisibility: MutableStateFlow<Status.Visibility> =
-        MutableStateFlow(Status.Visibility.UNKNOWN)
-    val showContentWarning: MutableStateFlow<Boolean> = MutableStateFlow(false)
-    val poll: MutableStateFlow<NewPoll?> = MutableStateFlow(null)
-    val scheduledAt: MutableStateFlow<String?> = MutableStateFlow(null)
+    private val _statusVisibility = MutableStateFlow(Status.Visibility.UNKNOWN)
+    val statusVisibility: StateFlow<Status.Visibility> = _statusVisibility.asStateFlow()
 
-    val media: MutableStateFlow<List<QueuedMedia>> = MutableStateFlow(emptyList())
-    val uploadError =
-        MutableSharedFlow<Throwable>(
-            replay = 0,
-            extraBufferCapacity = 1,
-            onBufferOverflow = BufferOverflow.DROP_OLDEST
-        )
+    private val _showContentWarning = MutableStateFlow(false)
+    val showContentWarning: StateFlow<Boolean> = _showContentWarning.asStateFlow()
 
-    val closeConfirmation = MutableStateFlow(ConfirmationKind.NONE)
+    private val _poll = MutableStateFlow(null as NewPoll?)
+    val poll: StateFlow<NewPoll?> = _poll.asStateFlow()
+
+    private val _scheduledAt = MutableStateFlow(null as String?)
+    val scheduledAt: StateFlow<String?> = _scheduledAt.asStateFlow()
+
+    private val _media = MutableStateFlow(emptyList<QueuedMedia>())
+    val media: StateFlow<List<QueuedMedia>> = _media.asStateFlow()
+
+    private val _uploadError = MutableSharedFlow<Throwable>(
+        replay = 0,
+        extraBufferCapacity = 1,
+        onBufferOverflow = BufferOverflow.DROP_OLDEST
+    )
+    val uploadError: SharedFlow<Throwable> = _uploadError.asSharedFlow()
+
+    private val _closeConfirmation = MutableStateFlow(ConfirmationKind.NONE)
+    val closeConfirmation: StateFlow<ConfirmationKind> = _closeConfirmation.asStateFlow()
 
     private lateinit var composeKind: ComposeKind
 
@@ -120,7 +134,7 @@ class ComposeViewModel @Inject constructor(
     ) {
         try {
             val (type, uri, size) = mediaUploader.prepareMedia(mediaUri, instanceInfo.first())
-            val mediaItems = media.value
+            val mediaItems = _media.value
             if (type != QueuedMedia.Type.IMAGE &&
                 mediaItems.isNotEmpty() &&
                 mediaItems[0].type == QueuedMedia.Type.IMAGE
@@ -145,7 +159,7 @@ class ComposeViewModel @Inject constructor(
     ): QueuedMedia {
         var stashMediaItem: QueuedMedia? = null
 
-        media.update { mediaList ->
+        _media.update { mediaList ->
             val mediaItem = QueuedMedia(
                 localId = mediaUploader.getNewLocalMediaId(),
                 uri = uri,
@@ -172,7 +186,7 @@ class ComposeViewModel @Inject constructor(
             mediaUploader
                 .uploadMedia(mediaItem, instanceInfo.first())
                 .collect { event ->
-                    val item = media.value.find { it.localId == mediaItem.localId }
+                    val item = _media.value.find { it.localId == mediaItem.localId }
                         ?: return@collect
                     val newMediaItem = when (event) {
                         is UploadEvent.ProgressEvent ->
@@ -188,12 +202,12 @@ class ComposeViewModel @Inject constructor(
                                 }
                             )
                         is UploadEvent.ErrorEvent -> {
-                            media.update { mediaList -> mediaList.filter { it.localId != mediaItem.localId } }
-                            uploadError.emit(event.error)
+                            _media.update { mediaList -> mediaList.filter { it.localId != mediaItem.localId } }
+                            _uploadError.emit(event.error)
                             return@collect
                         }
                     }
-                    media.update { mediaList ->
+                    _media.update { mediaList ->
                         mediaList.map { mediaItem ->
                             if (mediaItem.localId == newMediaItem.localId) {
                                 newMediaItem
@@ -208,6 +222,10 @@ class ComposeViewModel @Inject constructor(
         return mediaItem
     }
 
+    fun changeStatusVisibility(visibility: Status.Visibility) {
+        _statusVisibility.value = visibility
+    }
+
     private fun addUploadedMedia(
         id: String,
         type: QueuedMedia.Type,
@@ -215,7 +233,7 @@ class ComposeViewModel @Inject constructor(
         description: String?,
         focus: Attachment.Focus?
     ) {
-        media.update { mediaList ->
+        _media.update { mediaList ->
             val mediaItem = QueuedMedia(
                 localId = mediaUploader.getNewLocalMediaId(),
                 uri = uri,
@@ -233,12 +251,12 @@ class ComposeViewModel @Inject constructor(
 
     fun removeMediaFromQueue(item: QueuedMedia) {
         mediaUploader.cancelUploadScope(item.localId)
-        media.update { mediaList -> mediaList.filter { it.localId != item.localId } }
+        _media.update { mediaList -> mediaList.filter { it.localId != item.localId } }
         updateCloseConfirmation()
     }
 
     fun toggleMarkSensitive() {
-        this.markMediaAsSensitive.value = this.markMediaAsSensitive.value != true
+        this._markMediaAsSensitive.value = this._markMediaAsSensitive.value != true
     }
 
     fun updateContent(newContent: String?) {
@@ -252,12 +270,12 @@ class ComposeViewModel @Inject constructor(
     }
 
     private fun updateCloseConfirmation() {
-        val contentWarning = if (showContentWarning.value) {
+        val contentWarning = if (_showContentWarning.value) {
             currentContentWarning
         } else {
             ""
         }
-        this.closeConfirmation.value = if (didChange(currentContent, contentWarning)) {
+        this._closeConfirmation.value = if (didChange(currentContent, contentWarning)) {
             when (composeKind) {
                 ComposeKind.NEW -> if (isEmpty(currentContent, contentWarning)) {
                     ConfirmationKind.NONE
@@ -280,19 +298,19 @@ class ComposeViewModel @Inject constructor(
     private fun didChange(content: String?, contentWarning: String?): Boolean {
         val textChanged = content.orEmpty() != startingText.orEmpty()
         val contentWarningChanged = contentWarning.orEmpty() != startingContentWarning
-        val mediaChanged = media.value.isNotEmpty()
-        val pollChanged = poll.value != null
+        val mediaChanged = _media.value.isNotEmpty()
+        val pollChanged = _poll.value != null
         val didScheduledTimeChange = hasScheduledTimeChanged
 
         return modifiedInitialState || textChanged || contentWarningChanged || mediaChanged || pollChanged || didScheduledTimeChange
     }
 
     private fun isEmpty(content: String?, contentWarning: String?): Boolean {
-        return !modifiedInitialState && (content.isNullOrBlank() && contentWarning.isNullOrBlank() && media.value.isEmpty() && poll.value == null)
+        return !modifiedInitialState && (content.isNullOrBlank() && contentWarning.isNullOrBlank() && _media.value.isEmpty() && _poll.value == null)
     }
 
     fun contentWarningChanged(value: Boolean) {
-        showContentWarning.value = value
+        _showContentWarning.value = value
         contentWarningStateChanged = true
         updateCloseConfirmation()
     }
@@ -306,12 +324,12 @@ class ComposeViewModel @Inject constructor(
     }
 
     fun stopUploads() {
-        mediaUploader.cancelUploadScope(*media.value.map { it.localId }.toIntArray())
+        mediaUploader.cancelUploadScope(*_media.value.map { it.localId }.toIntArray())
     }
 
     fun shouldShowSaveDraftDialog(): Boolean {
         // if any of the media files need to be downloaded first it could take a while, so show a loading dialog
-        return media.value.any { mediaValue ->
+        return _media.value.any { mediaValue ->
             mediaValue.uri.scheme == "https"
         }
     }
@@ -320,7 +338,7 @@ class ComposeViewModel @Inject constructor(
         val mediaUris: MutableList<String> = mutableListOf()
         val mediaDescriptions: MutableList<String?> = mutableListOf()
         val mediaFocus: MutableList<Attachment.Focus?> = mutableListOf()
-        for (item in media.value) {
+        for (item in _media.value) {
             mediaUris.add(item.uri.toString())
             mediaDescriptions.add(item.description)
             mediaFocus.add(item.focus)
@@ -332,15 +350,15 @@ class ComposeViewModel @Inject constructor(
             inReplyToId = inReplyToId,
             content = content,
             contentWarning = contentWarning,
-            sensitive = markMediaAsSensitive.value,
-            visibility = statusVisibility.value,
+            sensitive = _markMediaAsSensitive.value,
+            visibility = _statusVisibility.value,
             mediaUris = mediaUris,
             mediaDescriptions = mediaDescriptions,
             mediaFocus = mediaFocus,
-            poll = poll.value,
+            poll = _poll.value,
             failedToSend = false,
             failedToSendAlert = false,
-            scheduledAt = scheduledAt.value,
+            scheduledAt = _scheduledAt.value,
             language = postLanguage,
             statusId = originalStatusId
         )
@@ -355,7 +373,7 @@ class ComposeViewModel @Inject constructor(
             api.deleteScheduledStatus(scheduledTootId!!)
         }
 
-        val attachedMedia = media.value.map { item ->
+        val attachedMedia = _media.value.map { item ->
             MediaToSend(
                 localId = item.localId,
                 id = item.id,
@@ -368,12 +386,12 @@ class ComposeViewModel @Inject constructor(
         val tootToSend = StatusToSend(
             text = content,
             warningText = spoilerText,
-            visibility = statusVisibility.value.serverString(),
-            sensitive = attachedMedia.isNotEmpty() && (markMediaAsSensitive.value || showContentWarning.value),
+            visibility = _statusVisibility.value.serverString,
+            sensitive = attachedMedia.isNotEmpty() && (_markMediaAsSensitive.value || _showContentWarning.value),
             media = attachedMedia,
-            scheduledAt = scheduledAt.value,
+            scheduledAt = _scheduledAt.value,
             inReplyToId = inReplyToId,
-            poll = poll.value,
+            poll = _poll.value,
             replyingStatusContent = null,
             replyingStatusAuthorUsername = null,
             accountId = accountId,
@@ -388,7 +406,7 @@ class ComposeViewModel @Inject constructor(
     }
 
     private fun updateMediaItem(localId: Int, mutator: (QueuedMedia) -> QueuedMedia) {
-        media.update { mediaList ->
+        _media.update { mediaList ->
             mediaList.map { mediaItem ->
                 if (mediaItem.localId == localId) {
                     mutator(mediaItem)
@@ -412,9 +430,9 @@ class ComposeViewModel @Inject constructor(
     }
 
     fun searchAutocompleteSuggestions(token: String): List<AutocompleteResult> {
-        when (token[0]) {
-            '@' -> {
-                return api.searchAccountsSync(query = token.substring(1), limit = 10)
+        return when (token[0]) {
+            '@' -> runBlocking {
+                api.searchAccounts(query = token.substring(1), limit = 10)
                     .fold({ accounts ->
                         accounts.map { AutocompleteResult.AccountResult(it) }
                     }, { e ->
@@ -422,8 +440,8 @@ class ComposeViewModel @Inject constructor(
                         emptyList()
                     })
             }
-            '#' -> {
-                return api.searchSync(
+            '#' -> runBlocking {
+                api.search(
                     query = token,
                     type = SearchType.Hashtag.apiParameter,
                     limit = 10
@@ -439,7 +457,7 @@ class ComposeViewModel @Inject constructor(
                 val emojiList = emoji.replayCache.firstOrNull() ?: return emptyList()
                 val incomplete = token.substring(1)
 
-                return emojiList.filter { emoji ->
+                emojiList.filter { emoji ->
                     emoji.shortcode.contains(incomplete, ignoreCase = true)
                 }.sortedBy { emoji ->
                     emoji.shortcode.indexOf(incomplete, ignoreCase = true)
@@ -449,7 +467,7 @@ class ComposeViewModel @Inject constructor(
             }
             else -> {
                 Log.w(TAG, "Unexpected autocompletion token: $token")
-                return emptyList()
+                emptyList()
             }
         }
     }
@@ -477,7 +495,7 @@ class ComposeViewModel @Inject constructor(
             startingContentWarning = contentWarning
         }
         if (!contentWarningStateChanged) {
-            showContentWarning.value = !contentWarning.isNullOrBlank()
+            _showContentWarning.value = !contentWarning.isNullOrBlank()
         }
 
         // recreate media list
@@ -511,7 +529,7 @@ class ComposeViewModel @Inject constructor(
         if (tootVisibility.num != Status.Visibility.UNKNOWN.num) {
             startingVisibility = tootVisibility
         }
-        statusVisibility.value = startingVisibility
+        _statusVisibility.value = startingVisibility
         val mentionedUsernames = composeOptions?.mentionedUsernames
         if (mentionedUsernames != null) {
             val builder = StringBuilder()
@@ -523,13 +541,13 @@ class ComposeViewModel @Inject constructor(
             startingText = builder.toString()
         }
 
-        scheduledAt.value = composeOptions?.scheduledAt
+        _scheduledAt.value = composeOptions?.scheduledAt
 
-        composeOptions?.sensitive?.let { markMediaAsSensitive.value = it }
+        composeOptions?.sensitive?.let { _markMediaAsSensitive.value = it }
 
         val poll = composeOptions?.poll
         if (poll != null && composeOptions.mediaAttachments.isNullOrEmpty()) {
-            this.poll.value = poll
+            this._poll.value = poll
         }
         replyingStatusContent = composeOptions?.replyingStatusContent
         replyingStatusAuthor = composeOptions?.replyingStatusAuthor
@@ -540,16 +558,16 @@ class ComposeViewModel @Inject constructor(
     }
 
     fun updatePoll(newPoll: NewPoll?) {
-        poll.value = newPoll
+        _poll.value = newPoll
         updateCloseConfirmation()
     }
 
     fun updateScheduledAt(newScheduledAt: String?) {
-        if (newScheduledAt != scheduledAt.value) {
+        if (newScheduledAt != _scheduledAt.value) {
             hasScheduledTimeChanged = true
         }
 
-        scheduledAt.value = newScheduledAt
+        _scheduledAt.value = newScheduledAt
     }
 
     val editing: Boolean

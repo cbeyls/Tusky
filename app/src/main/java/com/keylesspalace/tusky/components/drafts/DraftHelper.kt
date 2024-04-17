@@ -101,16 +101,17 @@ class DraftHelper @Inject constructor(
             }
         }
 
-        val attachments: MutableList<DraftAttachment> = mutableListOf()
-        for (i in mediaUris.indices) {
-            attachments.add(
-                DraftAttachment(
-                    uriString = uris[i].toString(),
-                    description = mediaDescriptions[i],
-                    focus = mediaFocus[i],
-                    type = types[i]
+        val attachments: List<DraftAttachment> = buildList(mediaUris.size) {
+            for (i in mediaUris.indices) {
+                add(
+                    DraftAttachment(
+                        uriString = uris[i].toString(),
+                        description = mediaDescriptions[i],
+                        focus = mediaFocus[i],
+                        type = types[i]
+                    )
                 )
-            )
+            }
         }
 
         val draft = DraftEntity(
@@ -186,10 +187,8 @@ class DraftHelper @Inject constructor(
 
                 val response = okHttpClient.newCall(request).execute()
 
-                val sink = file.sink().buffer()
-
-                response.body?.source()?.use { input ->
-                    sink.use { output ->
+                file.sink().buffer().use { output ->
+                    response.body?.source()?.use { input ->
                         output.writeAll(input)
                     }
                 }

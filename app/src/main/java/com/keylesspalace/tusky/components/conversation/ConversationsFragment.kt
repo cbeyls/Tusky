@@ -136,7 +136,11 @@ class ConversationsFragment :
 
             if (loadState.isAnyLoading()) {
                 lifecycleScope.launch {
-                    eventHub.dispatch(ConversationsLoadingEvent(accountManager.activeAccount?.accountId ?: ""))
+                    eventHub.dispatch(
+                        ConversationsLoadingEvent(
+                            accountManager.activeAccount?.accountId ?: ""
+                        )
+                    )
                 }
             }
 
@@ -153,12 +157,14 @@ class ConversationsFragment :
                             binding.statusView.showHelp(R.string.help_empty_conversations)
                         }
                     }
+
                     is LoadState.Error -> {
                         binding.statusView.show()
                         binding.statusView.setup(
                             (loadState.refresh as LoadState.Error).error
                         ) { refreshContent() }
                     }
+
                     is LoadState.Loading -> {
                         binding.progressBar.show()
                     }
@@ -242,6 +248,7 @@ class ConversationsFragment :
                 refreshContent()
                 true
             }
+
             else -> false
         }
     }
@@ -256,7 +263,8 @@ class ConversationsFragment :
 
         (binding.recyclerView.itemAnimator as SimpleItemAnimator).supportsChangeAnimations = false
 
-        binding.recyclerView.adapter = adapter.withLoadStateFooter(ConversationLoadStateAdapter(adapter::retry))
+        binding.recyclerView.adapter =
+            adapter.withLoadStateFooter(ConversationLoadStateAdapter(adapter::retry))
     }
 
     private fun refreshContent() {
@@ -284,13 +292,15 @@ class ConversationsFragment :
         }
     }
 
+    override val onMoreTranslate: ((translate: Boolean, position: Int) -> Unit)? = null
+
     override fun onMore(view: View, position: Int) {
         adapter.peek(position)?.let { conversation ->
 
             val popup = PopupMenu(requireContext(), view)
             popup.inflate(R.menu.conversation_more)
 
-            if (conversation.lastStatus.status.muted == true) {
+            if (conversation.lastStatus.status.muted) {
                 popup.menu.removeItem(R.id.status_mute_conversation)
             } else {
                 popup.menu.removeItem(R.id.status_unmute_conversation)
@@ -386,6 +396,10 @@ class ConversationsFragment :
         }
     }
 
+    override fun onUntranslate(position: Int) {
+        // not needed
+    }
+
     private fun deleteConversation(conversation: ConversationViewData) {
         AlertDialog.Builder(requireContext())
             .setMessage(R.string.dialog_delete_conversation_warning)
@@ -402,6 +416,7 @@ class ConversationsFragment :
             PrefKeys.FAB_HIDE -> {
                 hideFab = sharedPreferences.getBoolean(PrefKeys.FAB_HIDE, false)
             }
+
             PrefKeys.MEDIA_PREVIEW_ENABLED -> {
                 val enabled = accountManager.activeAccount!!.mediaPreviewEnabled
                 val oldMediaPreviewEnabled = adapter.mediaPreviewEnabled

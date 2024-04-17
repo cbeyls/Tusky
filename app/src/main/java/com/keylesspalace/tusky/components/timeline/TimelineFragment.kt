@@ -36,9 +36,10 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.recyclerview.widget.SimpleItemAnimator
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout.OnRefreshListener
+import at.connyduck.calladapter.networkresult.onFailure
 import at.connyduck.sparkbutton.helpers.Utils
-import autodispose2.androidx.lifecycle.autoDispose
 import com.google.android.material.color.MaterialColors
+import com.google.android.material.snackbar.Snackbar
 import com.keylesspalace.tusky.R
 import com.keylesspalace.tusky.adapter.StatusBaseViewHolder
 import com.keylesspalace.tusky.appstore.EventHub
@@ -67,16 +68,15 @@ import com.keylesspalace.tusky.util.hide
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
 import com.keylesspalace.tusky.util.unsafeLazy
+import com.keylesspalace.tusky.util.updateRelativeTimePeriodically
 import com.keylesspalace.tusky.util.viewBinding
 import com.keylesspalace.tusky.viewdata.AttachmentViewData
 import com.keylesspalace.tusky.viewdata.StatusViewData
+import com.keylesspalace.tusky.viewdata.TranslationViewData
 import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.googlematerial.GoogleMaterial
 import com.mikepenz.iconics.utils.colorInt
 import com.mikepenz.iconics.utils.sizeDp
-import io.reactivex.rxjava3.android.schedulers.AndroidSchedulers
-import io.reactivex.rxjava3.core.Observable
-import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -241,12 +241,14 @@ class TimelineFragment :
                             }
                         }
                     }
+
                     is LoadState.Error -> {
                         binding.statusView.show()
                         binding.statusView.setup(
                             (loadState.refresh as LoadState.Error).error
                         ) { onRefresh() }
                     }
+
                     is LoadState.Loading -> {
                         binding.progressBar.show()
                     }
@@ -309,12 +311,21 @@ class TimelineFragment :
                     is PreferenceChangedEvent -> {
                         onPreferenceChanged(event.preferenceKey)
                     }
+
                     is StatusComposedEvent -> {
                         val status = event.status
                         handleStatusComposeEvent(status)
                     }
                 }
             }
+        }
+
+        updateRelativeTimePeriodically {
+            adapter.notifyItemRangeChanged(
+                0,
+                adapter.itemCount,
+                listOf(StatusBaseViewHolder.Key.KEY_CREATED)
+            )
         }
     }
 
@@ -343,6 +354,7 @@ class TimelineFragment :
                     false
                 }
             }
+
             else -> false
         }
     }
@@ -410,6 +422,17 @@ class TimelineFragment :
         adapter.refresh()
     }
 
+    override val onMoreTranslate =
+        { translate: Boolean, position: Int ->
+            if (translate) {
+                onTranslate(position)
+            } else {
+                onUntranslate(
+                    position
+                )
+            }
+        }
+
     override fun onReply(position: Int) {
         val status = adapter.peek(position)?.asStatusOrNull() ?: return
         super.reply(status.status)
@@ -418,6 +441,25 @@ class TimelineFragment :
     override fun onReblog(reblog: Boolean, position: Int) {
         val status = adapter.peek(position)?.asStatusOrNull() ?: return
         viewModel.reblog(reblog, status)
+    }
+
+    private fun onTranslate(position: Int) {
+        val status = adapter.peek(position)?.asStatusOrNull() ?: return
+        lifecycleScope.launch {
+            viewModel.translate(status)
+                .onFailure {
+                    Snackbar.make(
+                        requireView(),
+                        getString(R.string.ui_error_translate, it.message),
+                        Snackbar.LENGTH_LONG
+                    ).show()
+                }
+        }
+    }
+
+    override fun onUntranslate(position: Int) {
+        val status = adapter.peek(position)?.asStatusOrNull() ?: return
+        viewModel.untranslate(status)
     }
 
     override fun onFavourite(favourite: Boolean, position: Int) {
@@ -442,7 +484,12 @@ class TimelineFragment :
 
     override fun onMore(view: View, position: Int) {
         val status = adapter.peek(position)?.asStatusOrNull() ?: return
-        super.more(status.status, view, position)
+        super.more(
+            status.status,
+            view,
+            position,
+            (status.translation as? TranslationViewData.Loaded)?.data
+        )
     }
 
     override fun onOpenReblog(position: Int) {
@@ -475,7 +522,8 @@ class TimelineFragment :
     override fun onLoadMore(position: Int) {
         val placeholder = adapter.peek(position)?.asPlaceholderOrNull() ?: return
         loadMorePosition = position
-        statusIdBelowLoadMore = if (position + 1 < adapter.itemCount) adapter.peek(position + 1)?.id else null
+        statusIdBelowLoadMore =
+            if (position + 1 < adapter.itemCount) adapter.peek(position + 1)?.id else null
         viewModel.loadMore(placeholder.id)
     }
 
@@ -528,6 +576,7 @@ class TimelineFragment :
             PrefKeys.FAB_HIDE -> {
                 hideFab = sharedPreferences.getBoolean(PrefKeys.FAB_HIDE, false)
             }
+
             PrefKeys.MEDIA_PREVIEW_ENABLED -> {
                 val enabled = accountManager.activeAccount!!.mediaPreviewEnabled
                 val oldMediaPreviewEnabled = adapter.mediaPreviewEnabled
@@ -536,6 +585,7 @@ class TimelineFragment :
                     adapter.notifyItemRangeChanged(0, adapter.itemCount)
                 }
             }
+
             PrefKeys.READING_ORDER -> {
                 readingOrder = ReadingOrder.from(
                     sharedPreferences.getString(PrefKeys.READING_ORDER, null)
@@ -550,10 +600,12 @@ class TimelineFragment :
             TimelineViewModel.Kind.PUBLIC_FEDERATED,
             TimelineViewModel.Kind.PUBLIC_LOCAL,
             TimelineViewModel.Kind.PUBLIC_TRENDING_STATUSES -> adapter.refresh()
+
             TimelineViewModel.Kind.USER,
             TimelineViewModel.Kind.USER_WITH_REPLIES -> if (status.account.id == viewModel.id) {
                 adapter.refresh()
             }
+
             TimelineViewModel.Kind.TAG,
             TimelineViewModel.Kind.FAVOURITES,
             TimelineViewModel.Kind.LIST,
@@ -578,13 +630,14 @@ class TimelineFragment :
 
     override fun onPause() {
         super.onPause()
-        (binding.recyclerView.layoutManager as? LinearLayoutManager)?.findFirstVisibleItemPosition()?.let { position ->
-            if (position != RecyclerView.NO_POSITION) {
-                adapter.snapshot().getOrNull(position)?.id?.let { statusId ->
-                    viewModel.saveReadingPosition(statusId)
+        (binding.recyclerView.layoutManager as? LinearLayoutManager)?.findFirstVisibleItemPosition()
+            ?.let { position ->
+                if (position != RecyclerView.NO_POSITION) {
+                    adapter.snapshot().getOrNull(position)?.id?.let { statusId ->
+                        viewModel.saveReadingPosition(statusId)
+                    }
                 }
             }
-        }
     }
 
     override fun onResume() {
@@ -597,29 +650,6 @@ class TimelineFragment :
         Log.d(TAG, "talkback was enabled: $wasEnabled, now $talkBackWasEnabled")
         if (talkBackWasEnabled && !wasEnabled) {
             adapter.notifyItemRangeChanged(0, adapter.itemCount)
-        }
-        startUpdateTimestamp()
-    }
-
-    /**
-     * Start to update adapter every minute to refresh timestamp
-     * If setting absoluteTimeView is false
-     * Auto dispose observable on pause
-     */
-    private fun startUpdateTimestamp() {
-        val preferences = PreferenceManager.getDefaultSharedPreferences(requireContext())
-        val useAbsoluteTime = preferences.getBoolean(PrefKeys.ABSOLUTE_TIME_VIEW, false)
-        if (!useAbsoluteTime) {
-            Observable.interval(0, 1, TimeUnit.MINUTES)
-                .observeOn(AndroidSchedulers.mainThread())
-                .autoDispose(this, Lifecycle.Event.ON_PAUSE)
-                .subscribe {
-                    adapter.notifyItemRangeChanged(
-                        0,
-                        adapter.itemCount,
-                        listOf(StatusBaseViewHolder.Key.KEY_CREATED)
-                    )
-                }
         }
     }
 

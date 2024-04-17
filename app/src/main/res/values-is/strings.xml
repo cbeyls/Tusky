@@ -696,4 +696,12 @@
     <string name="pref_title_show_self_boosts">Sýna sjálfs-endurbirtingar</string>
     <string name="pref_title_show_self_boosts_description">Einhver endurbirtir sína eigin færslu</string>
     <string name="pref_title_per_timeline_preferences">Kjörstillingar á hverja tímalínu</string>
+    <string name="reply_sending_long">Verið er að senda svarið þitt.</string>
+    <string name="reply_sending">Sendi…</string>
+    <string name="pref_title_show_notifications_filter">Birta tilkynningasíu</string>
+    <string name="action_translate">Þýða</string>
+    <string name="action_show_original">Sýna upprunalegt</string>
+    <string name="label_translating">Þýði…</string>
+    <string name="label_translated">Þýtt úr %1$s með %2$s</string>
+    <string name="ui_error_translate">Tókst ekki að þýða: %s</string>
 </resources>

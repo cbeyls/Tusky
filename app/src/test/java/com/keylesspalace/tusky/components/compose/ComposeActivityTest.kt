@@ -22,7 +22,6 @@ import android.os.Looper.getMainLooper
 import android.widget.EditText
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import at.connyduck.calladapter.networkresult.NetworkResult
-import com.google.gson.Gson
 import com.keylesspalace.tusky.R
 import com.keylesspalace.tusky.components.instanceinfo.InstanceInfoRepository
 import com.keylesspalace.tusky.db.AccountEntity
@@ -31,13 +30,18 @@ import com.keylesspalace.tusky.db.AppDatabase
 import com.keylesspalace.tusky.db.EmojisEntity
 import com.keylesspalace.tusky.db.InstanceDao
 import com.keylesspalace.tusky.db.InstanceInfoEntity
+import com.keylesspalace.tusky.di.NetworkModule
 import com.keylesspalace.tusky.di.ViewModelFactory
 import com.keylesspalace.tusky.entity.Instance
 import com.keylesspalace.tusky.entity.InstanceConfiguration
 import com.keylesspalace.tusky.entity.InstanceV1
+import com.keylesspalace.tusky.entity.SearchResult
 import com.keylesspalace.tusky.entity.StatusConfiguration
 import com.keylesspalace.tusky.network.MastodonApi
+import com.squareup.moshi.adapter
 import java.util.Locale
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
 import okhttp3.ResponseBody
 import okhttp3.ResponseBody.Companion.toResponseBody
 import org.junit.Assert.assertEquals
@@ -47,6 +51,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.kotlin.any
+import org.mockito.kotlin.anyOrNull
 import org.mockito.kotlin.doReturn
 import org.mockito.kotlin.eq
 import org.mockito.kotlin.mock
@@ -94,7 +99,7 @@ class ComposeActivityTest {
     private var instanceV1ResponseCallback: (() -> InstanceV1)? = null
     private var instanceResponseCallback: (() -> Instance)? = null
     private var composeOptions: ComposeActivity.ComposeOptions? = null
-    private val gson = Gson()
+    private val moshi = NetworkModule.providesMoshi()
 
     @Before
     fun setupActivity() {
@@ -121,11 +126,14 @@ class ComposeActivityTest {
                     NetworkResult.success(instance)
                 }
             }
+            onBlocking { search(anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull(), anyOrNull()) } doReturn NetworkResult.success(
+                SearchResult(emptyList(), emptyList(), emptyList())
+            )
         }
 
         val instanceDaoMock: InstanceDao = mock {
             onBlocking { getInstanceInfo(any()) } doReturn
-                InstanceInfoEntity(instanceDomain, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
+                InstanceInfoEntity(instanceDomain, null, null, null, null, null, null, null, null, null, null, null, null, null, null, null)
             onBlocking { getEmojiInfo(any()) } doReturn
                 EmojisEntity(instanceDomain, emptyList())
         }
@@ -134,7 +142,7 @@ class ComposeActivityTest {
             on { instanceDao() } doReturn instanceDaoMock
         }
 
-        val instanceInfoRepo = InstanceInfoRepository(apiMock, dbMock, accountManagerMock)
+        val instanceInfoRepo = InstanceInfoRepository(apiMock, dbMock, accountManagerMock, CoroutineScope(SupervisorJob()))
 
         val viewModel = ComposeViewModel(
             apiMock,
@@ -576,7 +584,7 @@ class ComposeActivityTest {
 
     private fun getConfiguration(maximumStatusCharacters: Int?, charactersReservedPerUrl: Int?): Instance.Configuration {
         return Instance.Configuration(
-            Instance.Configuration.Urls(streamingApi = ""),
+            Instance.Configuration.Urls(),
             Instance.Configuration.Accounts(1),
             Instance.Configuration.Statuses(
                 maximumStatusCharacters ?: InstanceInfoRepository.DEFAULT_CHARACTER_LIMIT,
@@ -615,8 +623,9 @@ class ComposeActivityTest {
         )
     }
 
+    @OptIn(ExperimentalStdlibApi::class)
     private fun getSampleFriendicaInstance(): Instance {
-        return gson.fromJson(sampleFriendicaResponse, Instance::class.java)
+        return moshi.adapter<Instance>().fromJson(sampleFriendicaResponse)!!
     }
 
     companion object {

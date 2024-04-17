@@ -91,6 +91,7 @@ import com.keylesspalace.tusky.components.trending.TrendingActivity
 import com.keylesspalace.tusky.databinding.ActivityMainBinding
 import com.keylesspalace.tusky.db.AccountEntity
 import com.keylesspalace.tusky.db.DraftsAlert
+import com.keylesspalace.tusky.di.ApplicationScope
 import com.keylesspalace.tusky.entity.Account
 import com.keylesspalace.tusky.entity.Notification
 import com.keylesspalace.tusky.entity.Status
@@ -102,6 +103,7 @@ import com.keylesspalace.tusky.pager.MainPagerAdapter
 import com.keylesspalace.tusky.settings.PrefKeys
 import com.keylesspalace.tusky.usecase.DeveloperToolsUseCase
 import com.keylesspalace.tusky.usecase.LogoutUsecase
+import com.keylesspalace.tusky.util.ShareShortcutHelper
 import com.keylesspalace.tusky.util.deleteStaleCachedMedia
 import com.keylesspalace.tusky.util.emojify
 import com.keylesspalace.tusky.util.getDimension
@@ -109,8 +111,8 @@ import com.keylesspalace.tusky.util.hide
 import com.keylesspalace.tusky.util.reduceSwipeSensitivity
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
+import com.keylesspalace.tusky.util.supportsOverridingActivityTransitions
 import com.keylesspalace.tusky.util.unsafeLazy
-import com.keylesspalace.tusky.util.updateShortcut
 import com.keylesspalace.tusky.util.viewBinding
 import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.googlematerial.GoogleMaterial
@@ -142,8 +144,8 @@ import com.mikepenz.materialdrawer.widget.AccountHeaderView
 import dagger.android.DispatchingAndroidInjector
 import dagger.android.HasAndroidInjector
 import de.c1710.filemojicompat_ui.helpers.EMOJI_PREFERENCE
-import io.reactivex.rxjava3.schedulers.Schedulers
 import javax.inject.Inject
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
@@ -165,6 +167,13 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
 
     @Inject
     lateinit var developerToolsUseCase: DeveloperToolsUseCase
+
+    @Inject
+    lateinit var shareShortcutHelper: ShareShortcutHelper
+
+    @Inject
+    @ApplicationScope
+    lateinit var externalScope: CoroutineScope
 
     private val binding by viewBinding(ActivityMainBinding::inflate)
 
@@ -206,6 +215,10 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
 
         val activeAccount = accountManager.activeAccount
             ?: return // will be redirected to LoginActivity by BaseActivity
+
+        if (supportsOverridingActivityTransitions() && explodeAnimationWasRequested()) {
+            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.explode, R.anim.activity_open_exit)
+        }
 
         var showNotificationTab = false
 
@@ -381,7 +394,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
             }
         }
 
-        Schedulers.io().scheduleDirect {
+        externalScope.launch(Dispatchers.IO) {
             // Flush old media that was cached for sharing
             deleteStaleCachedMedia(applicationContext.getExternalFilesDir("Tusky"))
         }
@@ -970,7 +983,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         cacheUpdater.stop()
         accountManager.setActiveAccount(newSelectedId)
         val intent = Intent(this, MainActivity::class.java)
-        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        intent.putExtra(OPEN_WITH_EXPLODE_ANIMATION, true)
         if (forward != null) {
             intent.type = forward.type
             intent.action = forward.action
@@ -978,11 +991,9 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
         startActivity(intent)
         finish()
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.explode, R.anim.explode)
-        } else {
+        if (!supportsOverridingActivityTransitions()) {
             @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.explode, R.anim.explode)
+            overridePendingTransition(R.anim.explode, R.anim.activity_open_exit)
         }
     }
 
@@ -1055,7 +1066,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
 
         updateProfiles()
-        updateShortcut(this, accountManager.activeAccount!!)
+        shareShortcutHelper.updateShortcut(accountManager.activeAccount!!)
     }
 
     @SuppressLint("CheckResult")
@@ -1200,11 +1211,17 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
     }
 
+    private fun explodeAnimationWasRequested(): Boolean {
+        return intent.getBooleanExtra(OPEN_WITH_EXPLODE_ANIMATION, false)
+    }
+
     override fun getActionButton() = binding.composeButton
 
     override fun androidInjector() = androidInjector
 
     companion object {
+        const val OPEN_WITH_EXPLODE_ANIMATION = "explode"
+
         private const val TAG = "MainActivity" // logging tag
         private const val DRAWER_ITEM_ADD_ACCOUNT: Long = -13
         private const val DRAWER_ITEM_ANNOUNCEMENTS: Long = 14

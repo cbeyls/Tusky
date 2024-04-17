@@ -48,6 +48,14 @@ android {
             minifyEnabled true
             shrinkResources true
             proguardFiles 'proguard-rules.pro'
+
+            kotlinOptions {
+                freeCompilerArgs = [
+                    "-Xno-param-assertions",
+                    "-Xno-call-assertions",
+                    "-Xno-receiver-assertions"
+                ]
+            }
         }
     }
 
@@ -64,7 +72,7 @@ android {
 
     lint {
         lintConfig file("lint.xml")
-        // Regenerate by running `./gradlew app:newLintBaseline`
+        // Regenerate by deleting the file and running `./gradlew app:lintGreenDebug`
         baseline = file("lint-baseline.xml")
     }
 
@@ -127,7 +135,6 @@ configurations {
 // library versions are in PROJECT_ROOT/gradle/libs.versions.toml
 dependencies {
     implementation libs.kotlinx.coroutines.android
-    implementation libs.kotlinx.coroutines.rx3
 
     implementation libs.bundles.androidx
     implementation libs.bundles.room
@@ -135,21 +142,19 @@ dependencies {
 
     implementation libs.android.material
 
-    implementation libs.gson
+    implementation libs.bundles.moshi
+    ksp libs.moshi.kotlin.codegen
 
     implementation libs.bundles.retrofit
     implementation libs.networkresult.calladapter
 
     implementation libs.bundles.okhttp
+    implementation libs.okio
 
     implementation libs.conscrypt.android
 
     implementation libs.bundles.glide
     ksp libs.glide.compiler
-
-    implementation libs.bundles.rxjava3
-
-    implementation libs.bundles.autodispose
 
     implementation libs.bundles.dagger
     kapt libs.bundles.dagger.processors

@@ -966,7 +966,7 @@ class ComposeActivity :
 
     private fun onMediaPick() {
         addMediaBehavior.addBottomSheetCallback(
-            object : BottomSheetBehavior.BottomSheetCallback() {
+            object : BottomSheetCallback() {
                 override fun onStateChanged(bottomSheet: View, newState: Int) {
                     // Wait until bottom sheet is not collapsed and show next screen after
                     if (newState == BottomSheetBehavior.STATE_COLLAPSED) {
@@ -1040,7 +1040,7 @@ class ComposeActivity :
 
     override fun onVisibilityChanged(visibility: Status.Visibility) {
         composeOptionsBehavior.state = BottomSheetBehavior.STATE_COLLAPSED
-        viewModel.statusVisibility.value = visibility
+        viewModel.changeStatusVisibility(visibility)
     }
 
     @VisibleForTesting
