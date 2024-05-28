@@ -49,7 +49,6 @@ import com.keylesspalace.tusky.interfaces.LinkListener
 import com.keylesspalace.tusky.network.MastodonApi
 import com.keylesspalace.tusky.settings.PrefKeys
 import com.keylesspalace.tusky.util.HttpHeaderLink
-import com.keylesspalace.tusky.util.getSerializableCompat
 import com.keylesspalace.tusky.util.hide
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
@@ -88,7 +87,7 @@ class AccountListFragment :
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        type = requireArguments().getSerializableCompat(ARG_TYPE)!!
+        type = enumValueOf(requireArguments().getString(ARG_TYPE)!!)
         id = requireArguments().getString(ARG_ID)
     }
 
@@ -416,7 +415,7 @@ class AccountListFragment :
         fun newInstance(type: Type, id: String? = null): AccountListFragment {
             return AccountListFragment().apply {
                 arguments = Bundle(3).apply {
-                    putSerializable(ARG_TYPE, type)
+                    putString(ARG_TYPE, type.name)
                     putString(ARG_ID, id)
                 }
             }

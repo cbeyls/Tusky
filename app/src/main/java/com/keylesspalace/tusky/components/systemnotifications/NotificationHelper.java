@@ -414,7 +414,7 @@ public class NotificationHelper {
                 .putExtra(KEY_SENDER_ACCOUNT_FULL_NAME, account.getFullName())
                 .putExtra(KEY_SERVER_NOTIFICATION_ID, body.getId())
                 .putExtra(KEY_CITED_STATUS_ID, inReplyToId)
-                .putExtra(KEY_VISIBILITY, replyVisibility)
+                .putExtra(KEY_VISIBILITY, replyVisibility.name())
                 .putExtra(KEY_SPOILER, contentWarning)
                 .putExtra(KEY_MENTIONS, mentionedUsernames.toArray(new String[0]));
 
