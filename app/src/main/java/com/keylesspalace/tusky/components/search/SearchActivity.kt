@@ -25,33 +25,22 @@ import android.view.MenuItem
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
 import androidx.core.view.MenuProvider
-import androidx.preference.PreferenceManager
 import com.google.android.material.tabs.TabLayoutMediator
 import com.keylesspalace.tusky.BottomSheetActivity
 import com.keylesspalace.tusky.R
 import com.keylesspalace.tusky.components.search.adapter.SearchPagerAdapter
 import com.keylesspalace.tusky.databinding.ActivitySearchBinding
-import com.keylesspalace.tusky.di.ViewModelFactory
 import com.keylesspalace.tusky.settings.PrefKeys
 import com.keylesspalace.tusky.util.reduceSwipeSensitivity
-import com.keylesspalace.tusky.util.unsafeLazy
 import com.keylesspalace.tusky.util.viewBinding
-import dagger.android.DispatchingAndroidInjector
-import dagger.android.HasAndroidInjector
-import javax.inject.Inject
+import dagger.hilt.android.AndroidEntryPoint
 
-class SearchActivity : BottomSheetActivity(), HasAndroidInjector, MenuProvider, SearchView.OnQueryTextListener {
-    @Inject
-    lateinit var androidInjector: DispatchingAndroidInjector<Any>
+@AndroidEntryPoint
+class SearchActivity : BottomSheetActivity(), MenuProvider, SearchView.OnQueryTextListener {
 
-    @Inject
-    lateinit var viewModelFactory: ViewModelFactory
-
-    private val viewModel: SearchViewModel by viewModels { viewModelFactory }
+    private val viewModel: SearchViewModel by viewModels()
 
     private val binding by viewBinding(ActivitySearchBinding::inflate)
-
-    private val preferences by unsafeLazy { PreferenceManager.getDefaultSharedPreferences(this) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -166,8 +155,6 @@ class SearchActivity : BottomSheetActivity(), HasAndroidInjector, MenuProvider, 
 
         return false
     }
-
-    override fun androidInjector() = androidInjector
 
     companion object {
         const val TAG = "SearchActivity"

@@ -3,27 +3,33 @@ package com.keylesspalace.tusky.components.filters
 import android.content.DialogInterface.BUTTON_POSITIVE
 import android.content.Intent
 import android.os.Bundle
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.lifecycle.lifecycleScope
 import com.keylesspalace.tusky.BaseActivity
 import com.keylesspalace.tusky.R
 import com.keylesspalace.tusky.databinding.ActivityFiltersBinding
-import com.keylesspalace.tusky.di.ViewModelFactory
 import com.keylesspalace.tusky.entity.Filter
 import com.keylesspalace.tusky.util.hide
+import com.keylesspalace.tusky.util.launchAndRepeatOnLifecycle
 import com.keylesspalace.tusky.util.show
-import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
 import com.keylesspalace.tusky.util.viewBinding
 import com.keylesspalace.tusky.util.visible
-import javax.inject.Inject
+import com.keylesspalace.tusky.util.withSlideInAnimation
+import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class FiltersActivity : BaseActivity(), FiltersListener {
-    @Inject
-    lateinit var viewModelFactory: ViewModelFactory
 
     private val binding by viewBinding(ActivityFiltersBinding::inflate)
-    private val viewModel: FiltersViewModel by viewModels { viewModelFactory }
+    private val viewModel: FiltersViewModel by viewModels()
+
+    private val editFilterLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            // refresh the filters upon returning from EditFilterActivity
+            reloadFilters()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,20 +46,16 @@ class FiltersActivity : BaseActivity(), FiltersListener {
             launchEditFilterActivity()
         }
 
-        binding.swipeRefreshLayout.setOnRefreshListener { loadFilters() }
+        binding.swipeRefreshLayout.setOnRefreshListener { reloadFilters() }
         binding.swipeRefreshLayout.setColorSchemeResources(R.color.tusky_blue)
 
         setTitle(R.string.pref_title_timeline_filters)
-    }
 
-    override fun onResume() {
-        super.onResume()
-        loadFilters()
         observeViewModel()
     }
 
     private fun observeViewModel() {
-        lifecycleScope.launch {
+        launchAndRepeatOnLifecycle {
             viewModel.state.collect { state ->
                 binding.progressBar.visible(
                     state.loadingState == FiltersViewModel.LoadingState.LOADING
@@ -70,7 +72,7 @@ class FiltersActivity : BaseActivity(), FiltersListener {
                             R.drawable.errorphant_offline,
                             R.string.error_network
                         ) {
-                            loadFilters()
+                            reloadFilters()
                         }
                         binding.messageView.show()
                     }
@@ -79,7 +81,7 @@ class FiltersActivity : BaseActivity(), FiltersListener {
                             R.drawable.errorphant_error,
                             R.string.error_generic
                         ) {
-                            loadFilters()
+                            reloadFilters()
                         }
                         binding.messageView.show()
                     }
@@ -101,8 +103,8 @@ class FiltersActivity : BaseActivity(), FiltersListener {
         }
     }
 
-    private fun loadFilters() {
-        viewModel.load()
+    private fun reloadFilters() {
+        viewModel.reload()
     }
 
     private fun launchEditFilterActivity(filter: Filter? = null) {
@@ -110,8 +112,8 @@ class FiltersActivity : BaseActivity(), FiltersListener {
             if (filter != null) {
                 putExtra(EditFilterActivity.FILTER_TO_EDIT, filter)
             }
-        }
-        startActivityWithSlideInAnimation(intent)
+        }.withSlideInAnimation()
+        editFilterLauncher.launch(intent)
     }
 
     override fun deleteFilter(filter: Filter) {

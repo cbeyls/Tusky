@@ -16,14 +16,11 @@
 package com.keylesspalace.tusky.components.account
 
 import android.animation.ArgbEvaluator
-import android.content.ClipData
-import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.Typeface
-import android.graphics.drawable.LayerDrawable
 import android.os.Bundle
 import android.text.SpannableStringBuilder
 import android.text.TextWatcher
@@ -49,7 +46,6 @@ import androidx.core.view.WindowInsetsCompat.Type.systemBars
 import androidx.core.view.updatePadding
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.viewpager2.widget.MarginPageTransformer
 import com.bumptech.glide.Glide
@@ -72,9 +68,8 @@ import com.keylesspalace.tusky.components.accountlist.AccountListActivity
 import com.keylesspalace.tusky.components.compose.ComposeActivity
 import com.keylesspalace.tusky.components.report.ReportActivity
 import com.keylesspalace.tusky.databinding.ActivityAccountBinding
-import com.keylesspalace.tusky.db.AccountEntity
 import com.keylesspalace.tusky.db.DraftsAlert
-import com.keylesspalace.tusky.di.ViewModelFactory
+import com.keylesspalace.tusky.db.entity.AccountEntity
 import com.keylesspalace.tusky.entity.Account
 import com.keylesspalace.tusky.entity.Relationship
 import com.keylesspalace.tusky.interfaces.AccountSelectionListener
@@ -85,6 +80,7 @@ import com.keylesspalace.tusky.settings.PrefKeys
 import com.keylesspalace.tusky.util.Error
 import com.keylesspalace.tusky.util.Loading
 import com.keylesspalace.tusky.util.Success
+import com.keylesspalace.tusky.util.copyToClipboard
 import com.keylesspalace.tusky.util.emojify
 import com.keylesspalace.tusky.util.getDomain
 import com.keylesspalace.tusky.util.hide
@@ -94,7 +90,6 @@ import com.keylesspalace.tusky.util.reduceSwipeSensitivity
 import com.keylesspalace.tusky.util.setClickableText
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
-import com.keylesspalace.tusky.util.unsafeLazy
 import com.keylesspalace.tusky.util.viewBinding
 import com.keylesspalace.tusky.util.visible
 import com.keylesspalace.tusky.view.showMuteAccountDialog
@@ -102,8 +97,7 @@ import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.googlematerial.GoogleMaterial
 import com.mikepenz.iconics.utils.colorInt
 import com.mikepenz.iconics.utils.sizeDp
-import dagger.android.DispatchingAndroidInjector
-import dagger.android.HasAndroidInjector
+import dagger.hilt.android.AndroidEntryPoint
 import java.text.NumberFormat
 import java.text.ParseException
 import java.text.SimpleDateFormat
@@ -112,24 +106,17 @@ import javax.inject.Inject
 import kotlin.math.abs
 import kotlinx.coroutines.launch
 
-class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider, HasAndroidInjector, LinkListener {
-
-    @Inject
-    lateinit var dispatchingAndroidInjector: DispatchingAndroidInjector<Any>
-
-    @Inject
-    lateinit var viewModelFactory: ViewModelFactory
+@AndroidEntryPoint
+class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider, LinkListener {
 
     @Inject
     lateinit var draftsAlert: DraftsAlert
 
-    private val viewModel: AccountViewModel by viewModels { viewModelFactory }
+    private val viewModel: AccountViewModel by viewModels()
 
     private val binding: ActivityAccountBinding by viewBinding(ActivityAccountBinding::inflate)
 
     private lateinit var accountFieldAdapter: AccountFieldAdapter
-
-    private val preferences by unsafeLazy { PreferenceManager.getDefaultSharedPreferences(this) }
 
     private var followState: FollowState = FollowState.NOT_FOLLOWING
     private var blocking: Boolean = false
@@ -181,10 +168,9 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         // Obtain information to fill out the profile.
         viewModel.setAccountInfo(intent.getStringExtra(KEY_ACCOUNT_ID)!!)
 
-        val sharedPrefs = PreferenceManager.getDefaultSharedPreferences(this)
-        animateAvatar = sharedPrefs.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
-        animateEmojis = sharedPrefs.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
-        hideFab = sharedPrefs.getBoolean(PrefKeys.FAB_HIDE, false)
+        animateAvatar = preferences.getBoolean(PrefKeys.ANIMATE_GIF_AVATARS, false)
+        animateEmojis = preferences.getBoolean(PrefKeys.ANIMATE_CUSTOM_EMOJIS, false)
+        hideFab = preferences.getBoolean(PrefKeys.FAB_HIDE, false)
 
         handleWindowInsets()
         setupToolbar()
@@ -249,7 +235,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         }
 
         // If wellbeing mode is enabled, follow stats and posts count should be hidden
-        val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         val wellbeingEnabled = preferences.getBoolean(PrefKeys.WELLBEING_HIDE_STATS_PROFILE, false)
 
         if (wellbeingEnabled) {
@@ -345,21 +330,9 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         toolbarBackground.fillColor = ColorStateList.valueOf(Color.TRANSPARENT)
         binding.accountToolbar.background = toolbarBackground
 
-        // Provide a non-transparent background to the navigation and overflow icons to ensure
-        // they remain visible over whatever the profile background image might be.
-        val backgroundCircle = AppCompatResources.getDrawable(this, R.drawable.background_circle)!!
-        backgroundCircle.alpha = 210 // Any lower than this and the backgrounds interfere
-        binding.accountToolbar.navigationIcon = LayerDrawable(
-            arrayOf(
-                backgroundCircle,
-                binding.accountToolbar.navigationIcon
-            )
-        )
-        binding.accountToolbar.overflowIcon = LayerDrawable(
-            arrayOf(
-                backgroundCircle,
-                binding.accountToolbar.overflowIcon
-            )
+        binding.accountToolbar.setNavigationIcon(R.drawable.ic_arrow_back_with_background)
+        binding.accountToolbar.setOverflowIcon(
+            AppCompatResources.getDrawable(this, R.drawable.ic_more_with_background)
         )
 
         binding.accountHeaderInfoContainer.background = MaterialShapeDrawable.createWithElevationOverlay(this, appBarElevation)
@@ -510,15 +483,10 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         for (view in listOf(binding.accountUsernameTextView, binding.accountDisplayNameTextView)) {
             view.setOnLongClickListener {
                 loadedAccount?.let { loadedAccount ->
-                    val fullUsername = getFullUsername(loadedAccount)
-                    val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    clipboard.setPrimaryClip(ClipData.newPlainText(null, fullUsername))
-                    Snackbar.make(
-                        binding.root,
+                    copyToClipboard(
+                        getFullUsername(loadedAccount),
                         getString(R.string.account_username_copied),
-                        Snackbar.LENGTH_SHORT
                     )
-                        .show()
                 }
                 true
             }
@@ -695,6 +663,7 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
             binding.accountFloatingActionButton.setOnClickListener { mention() }
 
             binding.accountFollowButton.setOnClickListener {
+                val confirmFollows = preferences.getBoolean(PrefKeys.CONFIRM_FOLLOWS, false)
                 if (viewModel.isSelf) {
                     val intent = Intent(this@AccountActivity, EditProfileActivity::class.java)
                     startActivity(intent)
@@ -708,7 +677,11 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
 
                 when (followState) {
                     FollowState.NOT_FOLLOWING -> {
-                        viewModel.changeFollowState()
+                        if (confirmFollows) {
+                            showFollowWarningDialog()
+                        } else {
+                            viewModel.changeFollowState()
+                        }
                     }
                     FollowState.REQUESTED -> {
                         showFollowRequestPendingDialog()
@@ -735,7 +708,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         showingReblogs = relation.showingReblogs
 
         // If wellbeing mode is enabled, "follows you" text should not be visible
-        val preferences = PreferenceManager.getDefaultSharedPreferences(this)
         val wellbeingEnabled = preferences.getBoolean(PrefKeys.WELLBEING_HIDE_STATS_PROFILE, false)
 
         binding.accountFollowsYouTextView.visible(relation.followedBy && !wellbeingEnabled)
@@ -923,6 +895,14 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
     private fun showUnfollowWarningDialog() {
         AlertDialog.Builder(this)
             .setMessage(R.string.dialog_unfollow_warning)
+            .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.changeFollowState() }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    private fun showFollowWarningDialog() {
+        AlertDialog.Builder(this)
+            .setMessage(R.string.dialog_follow_warning)
             .setPositiveButton(android.R.string.ok) { _, _ -> viewModel.changeFollowState() }
             .setNegativeButton(android.R.string.cancel, null)
             .show()
@@ -1155,8 +1135,6 @@ class AccountActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvide
         badge.updatePadding(top = 0, bottom = 0)
         return badge
     }
-
-    override fun androidInjector() = dispatchingAndroidInjector
 
     companion object {
 

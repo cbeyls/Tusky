@@ -19,20 +19,23 @@ import at.connyduck.calladapter.networkresult.fold
 import com.google.android.material.snackbar.Snackbar
 import com.keylesspalace.tusky.BaseActivity
 import com.keylesspalace.tusky.R
+import com.keylesspalace.tusky.StatusListActivity
 import com.keylesspalace.tusky.components.compose.ComposeAutoCompleteAdapter
 import com.keylesspalace.tusky.databinding.ActivityFollowedTagsBinding
-import com.keylesspalace.tusky.di.ViewModelFactory
 import com.keylesspalace.tusky.interfaces.HashtagActionListener
 import com.keylesspalace.tusky.network.MastodonApi
 import com.keylesspalace.tusky.settings.PrefKeys
+import com.keylesspalace.tusky.util.copyToClipboard
 import com.keylesspalace.tusky.util.hide
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.viewBinding
 import com.keylesspalace.tusky.util.visible
+import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
+@AndroidEntryPoint
 class FollowedTagsActivity :
     BaseActivity(),
     HashtagActionListener,
@@ -41,13 +44,10 @@ class FollowedTagsActivity :
     lateinit var api: MastodonApi
 
     @Inject
-    lateinit var viewModelFactory: ViewModelFactory
-
-    @Inject
     lateinit var sharedPreferences: SharedPreferences
 
     private val binding by viewBinding(ActivityFollowedTagsBinding::inflate)
-    private val viewModel: FollowedTagsViewModel by viewModels { viewModelFactory }
+    private val viewModel: FollowedTagsViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -149,7 +149,7 @@ class FollowedTagsActivity :
         lifecycleScope.launch {
             api.unfollowTag(tagName).fold(
                 {
-                    viewModel.tags.removeAt(position)
+                    viewModel.tags.removeIf { tag -> tag.name == tagName }
                     Snackbar.make(
                         this@FollowedTagsActivity,
                         binding.followedTagsView,
@@ -180,6 +180,17 @@ class FollowedTagsActivity :
 
     override fun search(token: String): List<ComposeAutoCompleteAdapter.AutocompleteResult> {
         return viewModel.searchAutocompleteSuggestions(token)
+    }
+
+    override fun viewTag(tagName: String) {
+        startActivity(StatusListActivity.newHashtagIntent(this, tagName))
+    }
+
+    override fun copyTagName(tagName: String) {
+        copyToClipboard(
+            "#$tagName",
+            getString(R.string.confirmation_hashtag_copied, tagName),
+        )
     }
 
     companion object {

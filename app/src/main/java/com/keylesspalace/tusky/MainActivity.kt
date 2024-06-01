@@ -45,15 +45,12 @@ import androidx.appcompat.content.res.AppCompatResources
 import androidx.coordinatorlayout.widget.CoordinatorLayout
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
-import androidx.core.content.IntentCompat
 import androidx.core.content.pm.ShortcutManagerCompat
-import androidx.core.view.GravityCompat
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.core.view.MenuProvider
 import androidx.core.view.forEach
 import androidx.core.view.isVisible
-import androidx.drawerlayout.widget.DrawerLayout
 import androidx.lifecycle.lifecycleScope
-import androidx.preference.PreferenceManager
 import androidx.viewpager2.widget.MarginPageTransformer
 import at.connyduck.calladapter.networkresult.fold
 import com.bumptech.glide.Glide
@@ -80,17 +77,17 @@ import com.keylesspalace.tusky.components.compose.ComposeActivity
 import com.keylesspalace.tusky.components.compose.ComposeActivity.Companion.canHandleMimeType
 import com.keylesspalace.tusky.components.drafts.DraftsActivity
 import com.keylesspalace.tusky.components.login.LoginActivity
-import com.keylesspalace.tusky.components.notifications.NotificationHelper
-import com.keylesspalace.tusky.components.notifications.disableAllNotifications
-import com.keylesspalace.tusky.components.notifications.enablePushNotificationsWithFallback
-import com.keylesspalace.tusky.components.notifications.showMigrationNoticeIfNecessary
 import com.keylesspalace.tusky.components.preference.PreferencesActivity
 import com.keylesspalace.tusky.components.scheduled.ScheduledStatusActivity
 import com.keylesspalace.tusky.components.search.SearchActivity
+import com.keylesspalace.tusky.components.systemnotifications.NotificationHelper
+import com.keylesspalace.tusky.components.systemnotifications.disableAllNotifications
+import com.keylesspalace.tusky.components.systemnotifications.enablePushNotificationsWithFallback
+import com.keylesspalace.tusky.components.systemnotifications.showMigrationNoticeIfNecessary
 import com.keylesspalace.tusky.components.trending.TrendingActivity
 import com.keylesspalace.tusky.databinding.ActivityMainBinding
-import com.keylesspalace.tusky.db.AccountEntity
 import com.keylesspalace.tusky.db.DraftsAlert
+import com.keylesspalace.tusky.db.entity.AccountEntity
 import com.keylesspalace.tusky.di.ApplicationScope
 import com.keylesspalace.tusky.entity.Account
 import com.keylesspalace.tusky.entity.Notification
@@ -103,16 +100,17 @@ import com.keylesspalace.tusky.pager.MainPagerAdapter
 import com.keylesspalace.tusky.settings.PrefKeys
 import com.keylesspalace.tusky.usecase.DeveloperToolsUseCase
 import com.keylesspalace.tusky.usecase.LogoutUsecase
+import com.keylesspalace.tusky.util.ActivityConstants
 import com.keylesspalace.tusky.util.ShareShortcutHelper
 import com.keylesspalace.tusky.util.deleteStaleCachedMedia
 import com.keylesspalace.tusky.util.emojify
 import com.keylesspalace.tusky.util.getDimension
+import com.keylesspalace.tusky.util.getParcelableExtraCompat
 import com.keylesspalace.tusky.util.hide
+import com.keylesspalace.tusky.util.overrideActivityTransitionCompat
 import com.keylesspalace.tusky.util.reduceSwipeSensitivity
 import com.keylesspalace.tusky.util.show
 import com.keylesspalace.tusky.util.startActivityWithSlideInAnimation
-import com.keylesspalace.tusky.util.supportsOverridingActivityTransitions
-import com.keylesspalace.tusky.util.unsafeLazy
 import com.keylesspalace.tusky.util.viewBinding
 import com.mikepenz.iconics.IconicsDrawable
 import com.mikepenz.iconics.typeface.library.googlematerial.GoogleMaterial
@@ -141,17 +139,17 @@ import com.mikepenz.materialdrawer.util.addItems
 import com.mikepenz.materialdrawer.util.addItemsAtPosition
 import com.mikepenz.materialdrawer.util.updateBadge
 import com.mikepenz.materialdrawer.widget.AccountHeaderView
-import dagger.android.DispatchingAndroidInjector
-import dagger.android.HasAndroidInjector
+import dagger.hilt.android.AndroidEntryPoint
+import dagger.hilt.android.migration.OptionalInject
 import de.c1710.filemojicompat_ui.helpers.EMOJI_PREFERENCE
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
-class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInjector, MenuProvider {
-    @Inject
-    lateinit var androidInjector: DispatchingAndroidInjector<Any>
+@OptionalInject
+@AndroidEntryPoint
+class MainActivity : BottomSheetActivity(), ActionButtonActivity, MenuProvider {
 
     @Inject
     lateinit var eventHub: EventHub
@@ -183,8 +181,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
 
     private var unreadAnnouncementsCount = 0
 
-    private val preferences by unsafeLazy { PreferenceManager.getDefaultSharedPreferences(this) }
-
     // We need to know if the emoji pack has been changed
     private var selectedEmojiPack: String? = null
 
@@ -198,26 +194,28 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
 
     private val onBackPressedCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
-            when {
-                binding.mainDrawerLayout.isOpen -> {
-                    binding.mainDrawerLayout.close()
-                }
-                binding.viewPager.currentItem != 0 -> {
-                    binding.viewPager.currentItem = 0
-                }
-            }
+            binding.viewPager.currentItem = 0
         }
     }
 
     @SuppressLint("RestrictedApi")
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Newer Android versions don't need to install the compat Splash Screen
+        // and it can cause theming bugs.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) {
+            installSplashScreen()
+        }
         super.onCreate(savedInstanceState)
 
-        val activeAccount = accountManager.activeAccount
-            ?: return // will be redirected to LoginActivity by BaseActivity
+        // will be redirected to LoginActivity by BaseActivity
+        val activeAccount = accountManager.activeAccount ?: return
 
-        if (supportsOverridingActivityTransitions() && explodeAnimationWasRequested()) {
-            overrideActivityTransition(OVERRIDE_TRANSITION_OPEN, R.anim.explode, R.anim.activity_open_exit)
+        if (explodeAnimationWasRequested()) {
+            overrideActivityTransitionCompat(
+                ActivityConstants.OVERRIDE_TRANSITION_OPEN,
+                R.anim.explode,
+                R.anim.activity_open_exit
+            )
         }
 
         var showNotificationTab = false
@@ -482,12 +480,14 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
     }
 
-    override fun onStart() {
-        super.onStart()
-        // For some reason the navigation drawer is opened when the activity is recreated
-        if (binding.mainDrawerLayout.isOpen) {
-            binding.mainDrawerLayout.closeDrawer(GravityCompat.START, false)
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Allow software back press to be properly dispatched to drawer layout
+        val handled = when (event.action) {
+            KeyEvent.ACTION_DOWN -> binding.mainDrawerLayout.onKeyDown(event.keyCode, event)
+            KeyEvent.ACTION_UP -> binding.mainDrawerLayout.onKeyUp(event.keyCode, event)
+            else -> false
         }
+        return handled || super.dispatchKeyEvent(event)
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -531,11 +531,8 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
     }
 
     private fun forwardToComposeActivity(intent: Intent) {
-        val composeOptions = IntentCompat.getParcelableExtra(
-            intent,
-            COMPOSE_OPTIONS,
-            ComposeActivity.ComposeOptions::class.java
-        )
+        val composeOptions =
+            intent.getParcelableExtraCompat<ComposeActivity.ComposeOptions>(COMPOSE_OPTIONS)
 
         val composeIntent = if (composeOptions != null) {
             ComposeActivity.startIntent(this, composeOptions)
@@ -627,19 +624,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
             )
             setSavedInstance(savedInstanceState)
         }
-        binding.mainDrawerLayout.addDrawerListener(object : DrawerLayout.DrawerListener {
-            override fun onDrawerSlide(drawerView: View, slideOffset: Float) { }
-
-            override fun onDrawerOpened(drawerView: View) {
-                onBackPressedCallback.isEnabled = true
-            }
-
-            override fun onDrawerClosed(drawerView: View) {
-                onBackPressedCallback.isEnabled = binding.tabLayout.selectedTabPosition > 0
-            }
-
-            override fun onDrawerStateChanged(newState: Int) { }
-        })
     }
 
     private fun refreshMainDrawerItems(
@@ -900,7 +884,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
 
         onTabSelectedListener = object : OnTabSelectedListener {
             override fun onTabSelected(tab: TabLayout.Tab) {
-                onBackPressedCallback.isEnabled = tab.position > 0 || binding.mainDrawerLayout.isOpen
+                onBackPressedCallback.isEnabled = tab.position > 0
 
                 binding.mainToolbar.title = tab.contentDescription
 
@@ -991,10 +975,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
         startActivity(intent)
         finish()
-        if (!supportsOverridingActivityTransitions()) {
-            @Suppress("DEPRECATION")
-            overridePendingTransition(R.anim.explode, R.anim.activity_open_exit)
-        }
     }
 
     private fun logout() {
@@ -1066,7 +1046,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         }
 
         updateProfiles()
-        shareShortcutHelper.updateShortcut(accountManager.activeAccount!!)
+        shareShortcutHelper.updateShortcuts()
     }
 
     @SuppressLint("CheckResult")
@@ -1204,7 +1184,7 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
         header.clear()
         header.profiles = profiles
         header.setActiveProfile(accountManager.activeAccount!!.id)
-        binding.mainToolbar.subtitle = if (accountManager.shouldDisplaySelfUsername(this)) {
+        binding.mainToolbar.subtitle = if (accountManager.shouldDisplaySelfUsername()) {
             accountManager.activeAccount!!.fullName
         } else {
             null
@@ -1216,8 +1196,6 @@ class MainActivity : BottomSheetActivity(), ActionButtonActivity, HasAndroidInje
     }
 
     override fun getActionButton() = binding.composeButton
-
-    override fun androidInjector() = androidInjector
 
     companion object {
         const val OPEN_WITH_EXPLODE_ANIMATION = "explode"

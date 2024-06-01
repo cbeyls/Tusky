@@ -18,17 +18,17 @@
 package com.keylesspalace.tusky.util
 
 /**
- * @return true if list is null or else return list.isEmpty()
+ * Copies elements to destination, removing duplicates and preserving original order.
  */
-fun isEmpty(list: List<*>?): Boolean {
-    return list.isNullOrEmpty()
+fun <T, C : MutableCollection<in T>> Iterable<T>.removeDuplicatesTo(destination: C): C {
+    return filterTo(destination, HashSet<T>()::add)
 }
 
 /**
- * @return a new ArrayList containing the elements without duplicates in the same order
+ * Copies elements to a new list, removing duplicates and preserving original order.
  */
-fun <T> removeDuplicates(list: List<T>): ArrayList<T> {
-    return list.filterNotTo(ArrayList(), HashSet<T>()::add)
+fun <T> Iterable<T>.removeDuplicates(): List<T> {
+    return removeDuplicatesTo(ArrayList())
 }
 
 inline fun <T> List<T>.withoutFirstWhich(predicate: (T) -> Boolean): List<T> {

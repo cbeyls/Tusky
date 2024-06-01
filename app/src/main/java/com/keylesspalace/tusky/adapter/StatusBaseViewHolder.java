@@ -9,6 +9,7 @@ import android.graphics.drawable.Drawable;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.format.DateUtils;
+import android.view.Gravity;
 import android.view.Menu;
 import android.view.View;
 import android.view.ViewGroup;
@@ -17,14 +18,14 @@ import android.widget.ImageButton;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.content.res.AppCompatResources;
 import androidx.appcompat.widget.PopupMenu;
+import androidx.appcompat.widget.TooltipCompat;
 import androidx.constraintlayout.widget.ConstraintLayout;
-import androidx.core.content.ContextCompat;
 import androidx.core.text.HtmlCompat;
 import androidx.recyclerview.widget.DefaultItemAnimator;
 import androidx.recyclerview.widget.LinearLayoutManager;
@@ -74,7 +75,6 @@ import java.text.NumberFormat;
 import java.util.Collections;
 import java.util.Date;
 import java.util.List;
-import java.util.Locale;
 
 import at.connyduck.sparkbutton.SparkButton;
 import at.connyduck.sparkbutton.helpers.Utils;
@@ -201,7 +201,7 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
         TouchDelegateHelper.expandTouchSizeToFillRow((ViewGroup) itemView, CollectionsKt.listOfNotNull(replyButton, reblogButton, favouriteButton, bookmarkButton, moreButton));
     }
 
-    protected void setDisplayName(@NonNull String name, @Nullable List<Emoji> customEmojis, @NonNull StatusDisplayOptions statusDisplayOptions) {
+    protected void setDisplayName(@NonNull String name, @NonNull List<Emoji> customEmojis, @NonNull StatusDisplayOptions statusDisplayOptions) {
         CharSequence emojifiedName = CustomEmojiHelper.emojify(
             name, customEmojis, displayName, statusDisplayOptions.animateEmojis()
         );
@@ -536,12 +536,14 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
 
             final Attachment.Type type = attachment.getType();
             if (showingContent && (type == Attachment.Type.VIDEO || type == Attachment.Type.GIFV)) {
-                imageView.setForeground(ContextCompat.getDrawable(itemView.getContext(), R.drawable.play_indicator_overlay));
+                imageView.setForegroundGravity(Gravity.CENTER);
+                imageView.setForeground(AppCompatResources.getDrawable(itemView.getContext(), R.drawable.ic_play_indicator));
             } else {
                 imageView.setForeground(null);
             }
 
-            setAttachmentClickListener(imageView, listener, i, attachment, true);
+            final CharSequence formattedDescription = AttachmentHelper.getFormattedDescription(attachment, imageView.getContext());
+            setAttachmentClickListener(imageView, listener, i, formattedDescription, true);
 
             if (sensitive) {
                 sensitiveMediaWarning.setText(R.string.post_sensitive_media_title);
@@ -611,17 +613,17 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
 
                 // Set the icon next to the label.
                 int drawableId = getLabelIcon(attachments.get(0).getType());
-                mediaLabel.setCompoundDrawablesWithIntrinsicBounds(drawableId, 0, 0, 0);
+                mediaLabel.setCompoundDrawablesRelativeWithIntrinsicBounds(drawableId, 0, 0, 0);
 
-                setAttachmentClickListener(mediaLabel, listener, i, attachment, false);
+                setAttachmentClickListener(mediaLabel, listener, i, mediaDescriptions[i], false);
             } else {
                 mediaLabel.setVisibility(View.GONE);
             }
         }
     }
 
-    private void setAttachmentClickListener(View view, @NonNull StatusActionListener listener,
-                                            int index, Attachment attachment, boolean animateTransition) {
+    private void setAttachmentClickListener(@NonNull View view, @NonNull StatusActionListener listener,
+                                            int index, CharSequence description, boolean animateTransition) {
         view.setOnClickListener(v -> {
             int position = getBindingAdapterPosition();
             if (position != RecyclerView.NO_POSITION) {
@@ -632,11 +634,7 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
                 }
             }
         });
-        view.setOnLongClickListener(v -> {
-            CharSequence description = AttachmentHelper.getFormattedDescription(attachment, view.getContext());
-            Toast.makeText(view.getContext(), description, Toast.LENGTH_LONG).show();
-            return true;
-        });
+        TooltipCompat.setTooltipText(view, description);
     }
 
     protected void hideSensitiveMediaWarning() {
@@ -794,7 +792,7 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
             if (statusDisplayOptions.mediaPreviewEnabled() && hasPreviewableAttachment(attachments)) {
                 setMediaPreviews(attachments, sensitive, listener, status.isShowingContent(), statusDisplayOptions.useBlurhash());
 
-                if (attachments.size() == 0) {
+                if (attachments.isEmpty()) {
                     hideSensitiveMediaWarning();
                 }
                 // Hide the unused label.
@@ -881,7 +879,14 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
             }
         }
 
-        filteredPlaceholderLabel.setText(itemView.getContext().getString(R.string.status_filter_placeholder_label_format, matchedFilter.getTitle()));
+        final String matchedFilterTitle;
+        if (matchedFilter == null) {
+            matchedFilterTitle = "";
+        } else {
+            matchedFilterTitle = matchedFilter.getTitle();
+        }
+
+        filteredPlaceholderLabel.setText(itemView.getContext().getString(R.string.status_filter_placeholder_label_format, matchedFilterTitle));
         filteredPlaceholderShowButton.setOnClickListener(view -> listener.clearWarningAction(getBindingAdapterPosition()));
     }
 
@@ -1158,7 +1163,7 @@ public abstract class StatusBaseViewHolder extends RecyclerView.ViewHolder {
         final Card card = actionable.getCard();
 
         if (cardViewMode != CardViewMode.NONE &&
-            actionable.getAttachments().size() == 0 &&
+            actionable.getAttachments().isEmpty() &&
             actionable.getPoll() == null &&
             card != null &&
             !TextUtils.isEmpty(card.getUrl()) &&
